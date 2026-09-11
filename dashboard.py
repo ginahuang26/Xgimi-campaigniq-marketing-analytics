@@ -18,7 +18,7 @@ PALETTE = ["#264653", "#2A9D8F", "#E9C46A", "#F4A261", "#E76F51"]
 def _clean_currency(series: pd.Series) -> pd.Series:
     return (
         series.astype(str)
-        .str.replace(r"[$,]", "", regex=True)
+        .str.replace(r"[RM,]", "", regex=True)
         .replace({"nan": np.nan})
         .astype(float)
     )
@@ -66,14 +66,14 @@ def budget_recommendation(d: pd.DataFrame) -> tuple[pd.DataFrame, float, float, 
 
 def main() -> None:
     st.set_page_config(
-        page_title="CampaignIQ — Marketing Analytics",
+        page_title="MarketPilot AI — Marketing Intelligence",
         layout="wide",
         initial_sidebar_state="expanded",
         page_icon="📊",
     )
 
-    st.title("📊 CampaignIQ — Marketing Analytics Dashboard")
-    st.caption("Marketing campaign attribution, ROI, and budget optimization")
+    st.title("🚀 MarketPilot AI — Marketing Intelligence Dashboard")
+    st.caption("Malaysia Consumer Electronics | Marketing Analytics, Customer Insights & Budget Optimization")
 
     # ── File uploader ──────────────────────────────────────────────────────────
     with st.sidebar:
@@ -151,6 +151,8 @@ def main() -> None:
     total_conversions = float(filt["Conversions"].sum())
     total_clicks = float(filt["Clicks"].sum())
     overall_conv_rate = (total_conversions / total_clicks * 100) if total_clicks > 0 else 0.0
+    overall_roas = total_revenue / total_spend if total_spend > 0 else 0.0
+    overall_cpa = total_spend / total_conversions if total_conversions > 0 else 0.0
     cm = channel_metrics(filt)
     best_channel = (
         cm.sort_values("ROI_pct", ascending=False).iloc[0]["Channel_Used"]
@@ -158,17 +160,19 @@ def main() -> None:
     )
 
     # ── KPI cards ──────────────────────────────────────────────────────────────
-    k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("Total Spend", f"${total_spend:,.0f}")
-    k2.metric("Total Revenue", f"${total_revenue:,.0f}")
-    k3.metric("Overall ROI %", f"{overall_roi:.2f}%")
-    k4.metric("Conversion Rate", f"{overall_conv_rate:.2f}%")
-    k5.metric("Best Channel", best_channel)
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
+
+    k1.metric("Marketing Spend", f"RM {total_spend:,.0f}")
+    k2.metric("Attributed Revenue", f"RM {total_revenue:,.0f}")
+    k3.metric("ROAS", f"{overall_roas:.2f}x")
+    k4.metric("Conversions", f"{total_conversions:,.0f}")
+    k5.metric("CPA", f"RM {overall_cpa:,.0f}")
+    k6.metric("Best Channel", best_channel)
 
     st.markdown("---")
 
-    tab_overview, tab_channels, tab_budget = st.tabs(
-        ["📈 Overview", "🎯 Channels & Segments", "💰 Budget Optimization"]
+    tab_overview, tab_channels, tab_products, tab_budget = st.tabs(
+        ["Overview","Channels & Segments","Product Performance","Budget Optimization"]
     )
 
     # ── Tab 1: Overview ──────────────────────────────────────────────────────
@@ -188,8 +192,8 @@ def main() -> None:
         ))
         trend.update_layout(
             title="Monthly spend vs revenue", height=400,
-            yaxis=dict(title="Spend ($)", side="left", showgrid=False),
-            yaxis2=dict(title="Revenue ($)", overlaying="y", side="right", showgrid=False),
+            yaxis=dict(title="Spend (RM)", side="left", showgrid=False),
+            yaxis2=dict(title="Revenue (RM)", overlaying="y", side="right", showgrid=False),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         )
         st.plotly_chart(trend, use_container_width=True)
@@ -206,7 +210,208 @@ def main() -> None:
     # ── Tab 2: Channels & Segments ───────────────────────────────────────────
     with tab_channels:
         st.caption("Compare channels and audience segments to see where ROI is strongest.")
+        st.subheader("Channel Performance Overview")
 
+        channel_summary = (
+        filt.groupby("Channel_Used", as_index=False)
+        .agg(
+            Spend=("Spend", "sum"),
+            Revenue=("Revenue", "sum"),
+            Conversions=("Conversions", "sum"),
+            Clicks=("Clicks", "sum"),
+        )
+    )
+
+        channel_summary["ROAS"] = (
+        channel_summary["Revenue"] / channel_summary["Spend"]
+    )
+
+        channel_summary["CPA"] = (
+        channel_summary["Spend"]
+        / channel_summary["Conversions"].replace(0, float("nan"))
+    )
+
+        channel_summary["Conversion_Rate"] = (
+        channel_summary["Conversions"]
+        / channel_summary["Clicks"]
+        * 100
+    )
+        best_roas_channel = channel_summary.loc[
+        channel_summary["ROAS"].idxmax()
+    ]
+
+        best_cpa_channel = channel_summary.loc[
+        channel_summary["CPA"].idxmin()
+    ]
+
+        best_conversion_channel = channel_summary.loc[
+        channel_summary["Conversion_Rate"].idxmax()
+    ]
+        c1, c2, c3 = st.columns(3)
+
+        c1.metric(
+        "Highest ROAS",
+        best_roas_channel["Channel_Used"],
+        f'{best_roas_channel["ROAS"]:.2f}x'
+    )
+
+        c2.metric(
+        "Lowest CPA",
+        best_cpa_channel["Channel_Used"],
+        f'RM {best_cpa_channel["CPA"]:,.0f}'
+    )
+
+        c3.metric(
+        "Best Conversion Rate",
+        best_conversion_channel["Channel_Used"],
+        f'{best_conversion_channel["Conversion_Rate"]:.2f}%'
+    )
+    
+        st.subheader("Channel Performance Table")
+
+        channel_display = channel_summary.copy()
+
+        channel_display["Spend"] = channel_display["Spend"].round(0)
+        channel_display["Revenue"] = channel_display["Revenue"].round(0)
+        channel_display["ROAS"] = channel_display["ROAS"].round(2)
+        channel_display["CPA"] = channel_display["CPA"].round(0)
+        channel_display["Conversion_Rate"] = (
+            channel_display["Conversion_Rate"].round(2)
+    )
+
+        channel_display = channel_display.rename(
+            columns={
+                "Channel_Used": "Channel",
+                "Spend": "Spend (RM)",
+                "Revenue": "Revenue (RM)",
+                "ROAS": "ROAS (x)",
+                "CPA": "CPA (RM)",
+                "Conversion_Rate": "Conversion Rate (%)"
+        }
+    )
+
+        channel_display = channel_display[
+        [
+            "Channel",
+            "Spend (RM)",
+            "Revenue (RM)",
+            "ROAS (x)",
+            "CPA (RM)",
+            "Conversion Rate (%)"
+        ]
+    ]
+
+        st.dataframe(
+            channel_display.sort_values(
+                "ROAS (x)",
+                ascending=False
+        ),
+            use_container_width=True,
+            hide_index=True
+    )
+        st.subheader("ROAS by Marketing Channel")
+
+        roas_chart_data = channel_summary.sort_values(
+            "ROAS",
+            ascending=False
+    )
+
+        fig_roas = px.bar(
+            roas_chart_data,
+            x="Channel_Used",
+            y="ROAS",
+            text="ROAS",
+            labels={
+            "Channel_Used": "Marketing Channel",
+            "ROAS": "ROAS (x)"
+        }
+    )
+
+        fig_roas.update_traces(
+            texttemplate="%{text:.2f}x",
+            textposition="outside"
+    )
+
+        fig_roas.update_layout(
+            xaxis_title="Marketing Channel",
+            yaxis_title="ROAS (x)",
+            height=430
+    )
+
+        st.plotly_chart(
+            fig_roas,
+            use_container_width=True
+    )
+        st.subheader("Channel Efficiency Matrix")
+
+        avg_spend = channel_summary["Spend"].mean()
+        avg_revenue = channel_summary["Revenue"].mean()
+
+        fig_matrix = px.scatter(
+            channel_summary,
+            x="Spend",
+            y="Revenue",
+            size="Conversions",
+            text="Channel_Used",
+            hover_name="Channel_Used",
+            labels={
+                "Spend": "Marketing Spend (RM)",
+                "Revenue": "Attributed Revenue (RM)",
+                "Conversions": "Conversions"
+        }
+    )
+
+        fig_matrix.add_vline(
+            x=avg_spend,
+            line_dash="dash"
+    )
+
+        fig_matrix.add_hline(
+            y=avg_revenue,
+            line_dash="dash"
+    )
+
+        fig_matrix.update_traces(
+            textposition="top center"
+    )
+
+        fig_matrix.update_layout(
+            height=500,
+            xaxis_title="Marketing Spend (RM)",
+            yaxis_title="Attributed Revenue (RM)"
+    )
+
+        st.plotly_chart(
+            fig_matrix,
+            use_container_width=True
+    )
+        worst_roas_channel = channel_summary.loc[
+            channel_summary["ROAS"].idxmin()
+    ]
+
+        highest_revenue_channel = channel_summary.loc[
+            channel_summary["Revenue"].idxmax()
+    ]
+
+        st.subheader("Business Insights")
+
+        st.info(
+            f"""
+            **Channel Performance Summary**
+
+            • **{best_roas_channel["Channel_Used"]}** delivers the highest ROAS at
+            **{best_roas_channel["ROAS"]:.2f}x**, indicating the strongest return on marketing investment.
+
+            • **{best_cpa_channel["Channel_Used"]}** achieves the lowest CPA at
+            **RM {best_cpa_channel["CPA"]:,.0f}**, suggesting stronger conversion cost efficiency.
+
+            • **{highest_revenue_channel["Channel_Used"]}** contributes the highest attributed revenue,
+            generating approximately **RM {highest_revenue_channel["Revenue"]:,.0f}**.
+            • **{worst_roas_channel["Channel_Used"]}** currently records the lowest ROAS at
+            **{worst_roas_channel["ROAS"]:.2f}x** and should be reviewed for targeting,
+            creative, bidding, or budget allocation efficiency.
+            """
+    )
         sort_metric = st.radio(
             "Rank channels by", ["ROI %", "Revenue", "Conversion Rate"], horizontal=True,
         )
@@ -262,7 +467,7 @@ def main() -> None:
                 "Projected revenue lift", f"{lift:+.2f}%",
                 help="If spend were reallocated toward higher-efficiency channels at the same total budget.",
             )
-            st.metric("Projected revenue", f"${projected:,.0f}")
+            st.metric("Projected revenue", f"RM {projected:,.0f}")
 
         top_camps = (
             filt.groupby(["Campaign_ID", "Campaign_Type", "Channel_Used"], as_index=False)
