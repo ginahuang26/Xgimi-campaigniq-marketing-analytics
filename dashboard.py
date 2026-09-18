@@ -171,8 +171,8 @@ def main() -> None:
 
     st.markdown("---")
 
-    tab_overview, tab_channels, tab_products, tab_budget = st.tabs(
-        ["Overview","Channels & Segments","Product Performance","Budget Optimization"]
+    tab_overview, tab_channels, tab_products,tab_campaigns, tab_customers,tab_budget = st.tabs(
+        ["Overview","Channels & Segments","Product Performance","Campaign Performance","Customers Intelligence","Budget Optimization"]
     )
 
     # ── Tab 1: Overview ──────────────────────────────────────────────────────
@@ -438,8 +438,448 @@ def main() -> None:
         )
         heatmap.update_layout(height=420)
         st.plotly_chart(heatmap, use_container_width=True)
+    
 
-    # ── Tab 3: Budget Optimization ───────────────────────────────────────────
+    # ── Tab 3: Product Performance ───────────────────────────────────────────
+
+    with tab_products:
+        st.caption(
+            "Compare product performance across revenue, ROAS, "
+            "conversion efficiency and product positioning."
+        )
+
+        st.subheader("Product Performance Overview")
+        product_summary = (
+            filt.groupby(
+                ["Product_Model", "Product_Category", "Product_Tier"],
+                as_index=False
+                )
+            .agg(
+                Spend=("Spend", "sum"),
+                Revenue=("Revenue", "sum"),
+                Conversions=("Conversions", "sum"),
+                Clicks=("Clicks", "sum"),
+                )
+        )
+
+        product_summary["ROAS"] = (
+            product_summary["Revenue"] / product_summary["Spend"]
+        )
+
+        product_summary["CPA"] = (
+            product_summary["Spend"]
+            / product_summary["Conversions"].replace(0, float("nan"))
+        )
+
+        product_summary["Conversion_Rate"] = (
+            product_summary["Conversions"]
+            / product_summary["Clicks"]
+            * 100
+        )
+        best_product_roas = product_summary.loc[
+            product_summary["ROAS"].idxmax()
+        ]
+
+        best_product_revenue = product_summary.loc[
+            product_summary["Revenue"].idxmax()
+        ]
+
+        best_product_conversion = product_summary.loc[
+            product_summary["Conversion_Rate"].idxmax()
+        ]
+
+        lowest_product_cpa = product_summary.loc[
+            product_summary["CPA"].idxmin()
+        ]
+        
+        p1, p2, p3, p4 = st.columns(4)
+        p1.metric(
+            "Highest ROAS Product",
+            best_product_roas["Product_Model"],
+            f'{best_product_roas["ROAS"]:.2f}x'
+        )
+
+        p2.metric(
+            "Revenue Leader",
+            best_product_revenue["Product_Model"],
+            f'RM {best_product_revenue["Revenue"]:,.0f}'
+        )
+
+        p3.metric(
+            "Best Conversion Product",
+            best_product_conversion["Product_Model"],
+            f'{best_product_conversion["Conversion_Rate"]:.2f}%'
+        )
+
+        p4.metric(
+            "Lowest CPA Product",
+            lowest_product_cpa["Product_Model"],
+            f'RM {lowest_product_cpa["CPA"]:,.0f}'
+        )
+    
+        st.subheader("Revenue & ROAS by Product")
+        product_chart = px.bar(
+            product_summary.sort_values(
+                "Revenue",
+                ascending=False
+            ),
+            x="Product_Model",
+            y="Revenue",
+            text="Revenue",
+            color="ROAS",
+            labels={
+                "Product_Model": "Product",
+                "Revenue": "Attributed Revenue (RM)",
+                "ROAS": "ROAS (x)"
+            }
+        )
+
+        product_chart.update_traces(
+            texttemplate="RM %{text:,.0f}",
+            textposition="outside"
+        )
+
+        product_chart.update_layout(
+            height=470,
+            xaxis_title="Product",
+            yaxis_title="Attributed Revenue (RM)"
+        )
+
+        st.plotly_chart(
+            product_chart,
+            use_container_width=True
+        )
+    
+        st.subheader("Performance by Product Tier")
+        tier_summary = (
+            filt.groupby(
+                "Product_Tier",
+                as_index=False
+            )
+            .agg(
+                Spend=("Spend", "sum"),
+                Revenue=("Revenue", "sum"),
+                Conversions=("Conversions", "sum"),
+            )
+        )
+
+        tier_summary["ROAS"] = (
+            tier_summary["Revenue"] / tier_summary["Spend"]
+        )
+
+        tier_summary["CPA"] = (
+            tier_summary["Spend"]
+            / tier_summary["Conversions"].replace(0, float("nan"))
+        )
+
+        tier_chart = px.bar(
+            tier_summary,
+            x="Product_Tier",
+            y="Revenue",
+            color="ROAS",
+            text="Revenue",
+            labels={
+                "Product_Tier": "Product Tier",
+                "Revenue": "Attributed Revenue (RM)",
+                "ROAS": "ROAS (x)"
+            }
+        )
+
+        tier_chart.update_traces(
+            texttemplate="RM %{text:,.0f}",
+            textposition="outside"
+        )
+
+        tier_chart.update_layout(
+            height=420
+        )
+
+        st.plotly_chart(
+            tier_chart,
+            use_container_width=True
+        )
+    
+        st.subheader("Product Performance Table")
+
+        product_display = product_summary.copy()
+
+        product_display["Spend"] = product_display["Spend"].round(0)
+        product_display["Revenue"] = product_display["Revenue"].round(0)
+        product_display["ROAS"] = product_display["ROAS"].round(2)
+        product_display["CPA"] = product_display["CPA"].round(0)
+        product_display["Conversion_Rate"] = (
+            product_display["Conversion_Rate"].round(2)
+        )
+
+        product_display = product_display.rename(
+            columns={
+                "Product_Model": "Product",
+                "Product_Category": "Category",
+                "Product_Tier": "Tier",
+                "Spend": "Spend (RM)",
+                "Revenue": "Revenue (RM)",
+                "ROAS": "ROAS (x)",
+                "CPA": "CPA (RM)",
+                "Conversion_Rate": "Conversion Rate (%)"
+            }
+        )
+
+        st.dataframe(
+            product_display.sort_values(
+                "Revenue (RM)",
+                ascending=False
+            ),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        worst_product_roas = product_summary.loc[
+            product_summary["ROAS"].idxmin()
+        ]
+
+        st.subheader("Product Insights")
+
+        st.info(
+            f"""
+            **Product Performance Summary**
+
+            • **{best_product_revenue["Product_Model"]}** is the revenue leader,
+            generating approximately **RM {best_product_revenue["Revenue"]:,.0f}**
+            in attributed revenue.
+
+            • **{best_product_roas["Product_Model"]}** delivers the strongest marketing efficiency
+            with a ROAS of **{best_product_roas["ROAS"]:.2f}x**.
+
+            • **{best_product_conversion["Product_Model"]}** achieves the highest conversion rate
+            at **{best_product_conversion["Conversion_Rate"]:.2f}%**.
+
+            • **{worst_product_roas["Product_Model"]}** has the lowest ROAS at
+            **{worst_product_roas["ROAS"]:.2f}x**, suggesting that its targeting,
+            pricing, promotional strategy or channel mix may require optimization.
+            """
+        )
+
+    # ── Tab 5: Campaign Performance ─────────────────────────────────────────
+    with tab_campaigns:
+        st.caption(
+            "Evaluate seasonal and promotional campaigns across revenue, "
+            "ROAS, conversion efficiency and marketing spend."
+        )
+
+        st.subheader("Campaign Performance Overview")
+        campaign_data = filt.copy()
+
+        campaign_data["Campaign_Theme"] = (
+            campaign_data["Campaign_Name"]
+            .str.split(" | ", regex=False)
+            .str[0]
+        )
+        campaign_summary = (
+            campaign_data.groupby(
+                "Campaign_Theme",
+                as_index=False
+            )
+            .agg(
+                Spend=("Spend", "sum"),
+                Revenue=("Revenue", "sum"),
+                Conversions=("Conversions", "sum"),
+                Clicks=("Clicks", "sum"),
+            )
+        )
+
+        campaign_summary["ROAS"] = (
+            campaign_summary["Revenue"]
+            / campaign_summary["Spend"]
+        )
+
+        campaign_summary["CPA"] = (
+            campaign_summary["Spend"]
+            / campaign_summary["Conversions"].replace(0, float("nan"))
+        )
+
+        campaign_summary["Conversion_Rate"] = (
+            campaign_summary["Conversions"]
+            / campaign_summary["Clicks"]
+            * 100
+        )
+        best_campaign_roas = campaign_summary.loc[
+            campaign_summary["ROAS"].idxmax()
+        ]
+
+        best_campaign_revenue = campaign_summary.loc[
+            campaign_summary["Revenue"].idxmax()
+        ]
+
+        best_campaign_conversion = campaign_summary.loc[
+            campaign_summary["Conversion_Rate"].idxmax()
+        ]
+
+        lowest_campaign_cpa = campaign_summary.loc[
+            campaign_summary["CPA"].idxmin()
+        ]
+
+        ca1, ca2, ca3, ca4 = st.columns(4)
+
+        ca1.metric(
+            "Highest ROAS Campaign",
+            best_campaign_roas["Campaign_Theme"],
+            f'{best_campaign_roas["ROAS"]:.2f}x'
+        )
+
+        ca2.metric(
+            "Revenue Leader",
+            best_campaign_revenue["Campaign_Theme"],
+            f'RM {best_campaign_revenue["Revenue"]:,.0f}'
+        )
+
+        ca3.metric(
+            "Best Conversion Campaign",
+            best_campaign_conversion["Campaign_Theme"],
+            f'{best_campaign_conversion["Conversion_Rate"]:.2f}%'
+        )
+
+        ca4.metric(
+            "Lowest CPA Campaign",
+            lowest_campaign_cpa["Campaign_Theme"],
+            f'RM {lowest_campaign_cpa["CPA"]:,.0f}'
+        )
+
+        st.subheader("Revenue & ROAS by Campaign")
+
+        campaign_chart = px.bar(
+            campaign_summary.sort_values(
+                "Revenue",
+                ascending=False
+            ),
+            x="Campaign_Theme",
+            y="Revenue",
+            text="Revenue",
+            color="ROAS",
+            labels={
+                "Campaign_Theme": "Campaign",
+                "Revenue": "Attributed Revenue (RM)",
+                "ROAS": "ROAS (x)"
+            }
+        )
+
+        campaign_chart.update_traces(
+            texttemplate="RM %{text:,.0f}",
+            textposition="outside"
+        )
+
+        campaign_chart.update_layout(
+            height=520,
+            xaxis_title="Campaign",
+            yaxis_title="Attributed Revenue (RM)",
+            xaxis_tickangle=-30
+        )
+
+        st.plotly_chart(
+            campaign_chart,
+            use_container_width=True
+        )
+
+        st.subheader("Campaign Efficiency Matrix")
+
+        avg_campaign_spend = campaign_summary["Spend"].mean()
+        avg_campaign_revenue = campaign_summary["Revenue"].mean()
+
+        campaign_matrix = px.scatter(
+            campaign_summary,
+            x="Spend",
+            y="Revenue",
+            size="Conversions",
+            text="Campaign_Theme",
+            hover_name="Campaign_Theme",
+            labels={
+                "Spend": "Marketing Spend (RM)",
+                "Revenue": "Attributed Revenue (RM)",
+                "Conversions": "Conversions"
+            }
+        )
+
+        campaign_matrix.add_vline(
+            x=avg_campaign_spend,
+            line_dash="dash"
+        )
+
+        campaign_matrix.add_hline(
+            y=avg_campaign_revenue,
+            line_dash="dash"
+        )
+
+        campaign_matrix.update_traces(
+            textposition="top center"
+        )
+
+        campaign_matrix.update_layout(
+            height=520
+        )
+
+        st.plotly_chart(
+            campaign_matrix,
+            use_container_width=True
+        )
+
+        st.subheader("Campaign Performance Table")
+       
+        campaign_display = campaign_summary.copy()
+
+        campaign_display["Spend"] = campaign_display["Spend"].round(0)
+        campaign_display["Revenue"] = campaign_display["Revenue"].round(0)
+        campaign_display["ROAS"] = campaign_display["ROAS"].round(2)
+        campaign_display["CPA"] = campaign_display["CPA"].round(0)
+        campaign_display["Conversion_Rate"] = (
+            campaign_display["Conversion_Rate"].round(2)
+        )
+
+        campaign_display = campaign_display.rename(
+            columns={
+                "Campaign_Theme": "Campaign",
+                "Spend": "Spend (RM)",
+                "Revenue": "Revenue (RM)",
+                "ROAS": "ROAS (x)",
+                "CPA": "CPA (RM)",
+                "Conversion_Rate": "Conversion Rate (%)"
+            }
+        )
+
+        st.dataframe(
+            campaign_display.sort_values(
+                "Revenue (RM)",
+                ascending=False
+            ),
+            use_container_width=True,
+            hide_index=True
+        )
+    
+        worst_campaign_roas = campaign_summary.loc[
+        campaign_summary["ROAS"].idxmin()
+        ]
+
+        st.subheader("Campaign Insights")
+
+        st.info(
+            f"""
+            **Campaign Performance Summary**
+
+            • **{best_campaign_revenue["Campaign_Theme"]}** generated the highest attributed revenue
+            at approximately **RM {best_campaign_revenue["Revenue"]:,.0f}**.
+
+            • **{best_campaign_roas["Campaign_Theme"]}** delivered the strongest marketing efficiency
+            with a ROAS of **{best_campaign_roas["ROAS"]:.2f}x**.
+
+            • **{best_campaign_conversion["Campaign_Theme"]}** achieved the highest conversion rate
+            at **{best_campaign_conversion["Conversion_Rate"]:.2f}%**.
+
+            • **{worst_campaign_roas["Campaign_Theme"]}** recorded the lowest ROAS at
+            **{worst_campaign_roas["ROAS"]:.2f}x**, suggesting that campaign targeting,
+            promotional mechanics, creative strategy or budget allocation may require review.
+            """
+        )
+    
+
+    # ── Tab 5: Budget Optimization ───────────────────────────────────────────
     with tab_budget:
         st.caption(
             "Efficiency-weighted reallocation model — same total budget, redistributed toward "
