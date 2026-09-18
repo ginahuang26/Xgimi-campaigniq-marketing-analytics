@@ -196,7 +196,7 @@ def main() -> None:
             yaxis2=dict(title="Revenue (RM)", overlaying="y", side="right", showgrid=False),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         )
-        st.plotly_chart(trend, use_container_width=True)
+        st.plotly_chart(trend, use_container_width=True,key="overview_trend_chart")
 
         scatter = px.scatter(
             filt, x="Spend", y="Revenue", size="Conversions", color="Channel_Used",
@@ -205,7 +205,7 @@ def main() -> None:
             title="Spend vs Revenue (bubble size = conversions)",
         )
         scatter.update_layout(height=420, legend_title_text="Channel")
-        st.plotly_chart(scatter, use_container_width=True)
+        st.plotly_chart(scatter, use_container_width=True,key="overview_scatter_chart")
 
     # ── Tab 2: Channels & Segments ───────────────────────────────────────────
     with tab_channels:
@@ -340,7 +340,8 @@ def main() -> None:
 
         st.plotly_chart(
             fig_roas,
-            use_container_width=True
+            use_container_width=True,
+            key="channel_roas_chart"
     )
         st.subheader("Channel Efficiency Matrix")
 
@@ -383,7 +384,8 @@ def main() -> None:
 
         st.plotly_chart(
             fig_matrix,
-            use_container_width=True
+            use_container_width=True,
+            key="channel_efficiency_matrix"
     )
         worst_roas_channel = channel_summary.loc[
             channel_summary["ROAS"].idxmin()
@@ -424,7 +426,7 @@ def main() -> None:
             labels={metric_map[sort_metric]: sort_metric, "Channel_Used": "Channel"},
         )
         roi_bar.update_layout(height=420, showlegend=False)
-        st.plotly_chart(roi_bar, use_container_width=True)
+        st.plotly_chart(roi_bar, use_container_width=True,key="channel_ranking")
 
         heat = (
             filt.groupby(["Customer_Segment", "Channel_Used"], as_index=False)
@@ -437,9 +439,8 @@ def main() -> None:
             labels=dict(x="Channel", y="Segment", color="Avg ROI"),
         )
         heatmap.update_layout(height=420)
-        st.plotly_chart(heatmap, use_container_width=True)
+        st.plotly_chart(heatmap, use_container_width=True,key="segment_channel_heatmap")
     
-
     # ── Tab 3: Product Performance ───────────────────────────────────────────
 
     with tab_products:
@@ -547,7 +548,8 @@ def main() -> None:
 
         st.plotly_chart(
             product_chart,
-            use_container_width=True
+            use_container_width=True,
+            key="product_revenue_roas"
         )
     
         st.subheader("Performance by Product Tier")
@@ -596,7 +598,8 @@ def main() -> None:
 
         st.plotly_chart(
             tier_chart,
-            use_container_width=True
+            use_container_width=True,
+            key="product_tier_performance"
         )
     
         st.subheader("Product Performance Table")
@@ -658,8 +661,274 @@ def main() -> None:
             pricing, promotional strategy or channel mix may require optimization.
             """
         )
+    # ── Tab 5: Customer Intelligence ─────────────────────────────────────────
+    with tab_customers:
+        st.caption(
+            "Understand customer segments across revenue contribution, "
+            "marketing efficiency, conversion behavior and channel preference."
+        )
 
-    # ── Tab 5: Campaign Performance ─────────────────────────────────────────
+        st.subheader("Customer Segment Overview")
+        segment_summary = (
+            filt.groupby(
+                "Customer_Segment",
+                as_index=False
+            )
+            .agg(
+                Spend=("Spend", "sum"),
+                Revenue=("Revenue", "sum"),
+             Conversions=("Conversions", "sum"),
+                Clicks=("Clicks", "sum"),
+            )
+        )
+
+        segment_summary["ROAS"] = (
+            segment_summary["Revenue"]
+            / segment_summary["Spend"]
+        )
+
+        segment_summary["CPA"] = (
+            segment_summary["Spend"]
+            / segment_summary["Conversions"].replace(0, float("nan"))
+        )
+
+        segment_summary["Conversion_Rate"] = (
+            segment_summary["Conversions"]
+            / segment_summary["Clicks"]
+            * 100
+        )
+        highest_value_segment = segment_summary.loc[
+            segment_summary["Revenue"].idxmax()
+        ]
+
+        best_segment_roas = segment_summary.loc[
+            segment_summary["ROAS"].idxmax()
+        ]
+
+        best_segment_conversion = segment_summary.loc[
+            segment_summary["Conversion_Rate"].idxmax()
+        ]
+
+        lowest_segment_cpa = segment_summary.loc[
+            segment_summary["CPA"].idxmin()
+        ]
+        s1, s2, s3, s4 = st.columns(4)
+
+        s1.metric(
+            "Highest Revenue Segment",
+            highest_value_segment["Customer_Segment"],
+            f'RM {highest_value_segment["Revenue"]:,.0f}'
+        )
+
+        s2.metric(
+            "Highest ROAS Segment",
+            best_segment_roas["Customer_Segment"],
+            f'{best_segment_roas["ROAS"]:.2f}x'
+        )
+
+        s3.metric(
+            "Best Conversion Segment",
+            best_segment_conversion["Customer_Segment"],
+            f'{best_segment_conversion["Conversion_Rate"]:.2f}%'
+        )
+
+        s4.metric(
+            "Lowest CPA Segment",
+            lowest_segment_cpa["Customer_Segment"],
+            f'RM {lowest_segment_cpa["CPA"]:,.0f}'
+        )
+
+        st.subheader("Revenue & ROAS by Customer Segment")
+
+        segment_chart = px.bar(
+            segment_summary.sort_values(
+                "Revenue",
+                ascending=False
+            ),
+            x="Customer_Segment",
+            y="Revenue",
+            text="Revenue",
+            color="ROAS",
+            labels={
+                "Customer_Segment": "Customer Segment",
+                "Revenue": "Attributed Revenue (RM)",
+                "ROAS": "ROAS (x)"
+            }
+        )
+
+        segment_chart.update_traces(
+            texttemplate="RM %{text:,.0f}",
+            textposition="outside"
+        )
+
+        segment_chart.update_layout(
+            height=480,
+            xaxis_title="Customer Segment",
+            yaxis_title="Attributed Revenue (RM)",
+            xaxis_tickangle=-20
+        )
+
+        st.plotly_chart(
+            segment_chart,
+            use_container_width=True,
+            key="customer_segment_revenue_roas"
+        )
+        
+
+        st.subheader("Channel Preference by Customer Segment")
+
+        segment_channel = (
+            filt.groupby(
+                ["Customer_Segment", "Channel_Used"],
+                as_index=False
+            )
+            .agg(
+                Revenue=("Revenue", "sum"),
+                Spend=("Spend", "sum"),
+                Conversions=("Conversions", "sum")
+            )
+        )
+
+        segment_channel["ROAS"] = (
+            segment_channel["Revenue"]
+            / segment_channel["Spend"]
+        )
+        best_channel_by_segment = (
+            segment_channel.sort_values(
+                ["Customer_Segment", "ROAS"],
+                ascending=[True, False]
+            )
+            .groupby("Customer_Segment")
+            .first()
+            .reset_index()
+        )
+
+        best_channel_display = best_channel_by_segment[
+            [
+                "Customer_Segment",
+                "Channel_Used",
+                "Revenue",
+                "ROAS"
+            ]
+        ].copy()
+
+        best_channel_display["Revenue"] = (
+            best_channel_display["Revenue"].round(0)
+        )
+
+        best_channel_display["ROAS"] = (
+            best_channel_display["ROAS"].round(2)
+        )
+
+        best_channel_display = best_channel_display.rename(
+            columns={
+                "Customer_Segment": "Customer Segment",
+                "Channel_Used": "Best Channel",
+                "Revenue": "Revenue (RM)",
+                "ROAS": "ROAS (x)"
+            }
+        )
+
+        st.dataframe(
+            best_channel_display,
+            use_container_width=True,
+            hide_index=True
+        )
+    
+        st.subheader("Product Tier Preference by Customer Segment")
+
+        segment_tier = (
+            filt.groupby(
+                ["Customer_Segment", "Product_Tier"],
+                as_index=False
+            )
+            .agg(
+                Revenue=("Revenue", "sum")
+            )
+        )
+
+        tier_preference_chart = px.bar(
+            segment_tier,
+            x="Customer_Segment",
+            y="Revenue",
+            color="Product_Tier",
+            barmode="stack",
+            labels={
+                "Customer_Segment": "Customer Segment",
+                "Revenue": "Attributed Revenue (RM)",
+                "Product_Tier": "Product Tier"
+            }
+        )
+
+        tier_preference_chart.update_layout(
+            height=500,
+            xaxis_tickangle=-20
+        )
+
+        st.plotly_chart(
+            tier_preference_chart,
+            use_container_width=True,
+            key="customer_product_tier_preference"
+        )
+
+        st.subheader("Customer Segment Performance Table")
+
+        segment_display = segment_summary.copy()
+
+        segment_display["Spend"] = segment_display["Spend"].round(0)
+        segment_display["Revenue"] = segment_display["Revenue"].round(0)
+        segment_display["ROAS"] = segment_display["ROAS"].round(2)
+        segment_display["CPA"] = segment_display["CPA"].round(0)
+        segment_display["Conversion_Rate"] = (
+            segment_display["Conversion_Rate"].round(2)
+        )
+
+        segment_display = segment_display.rename(
+            columns={
+                "Customer_Segment": "Customer Segment",
+                "Spend": "Spend (RM)",
+                "Revenue": "Revenue (RM)",
+                "ROAS": "ROAS (x)",
+                "CPA": "CPA (RM)",
+                "Conversion_Rate": "Conversion Rate (%)"
+            }
+        )
+
+        st.dataframe(
+            segment_display.sort_values(
+                "Revenue (RM)",
+                ascending=False
+            ),
+            use_container_width=True,
+            hide_index=True
+        )
+    
+        lowest_segment_roas = segment_summary.loc[
+            segment_summary["ROAS"].idxmin()
+        ]
+
+        st.subheader("Customer Insights")
+
+        st.info(
+            f"""
+            **Customer Segment Summary**
+
+            • **{highest_value_segment["Customer_Segment"]}** contributes the highest attributed revenue,
+            generating approximately **RM {highest_value_segment["Revenue"]:,.0f}**.
+
+            • **{best_segment_roas["Customer_Segment"]}** delivers the strongest marketing efficiency
+            with a ROAS of **{best_segment_roas["ROAS"]:.2f}x**.
+
+            • **{best_segment_conversion["Customer_Segment"]}** achieves the highest conversion rate
+            at **{best_segment_conversion["Conversion_Rate"]:.2f}%**.
+
+            • **{lowest_segment_roas["Customer_Segment"]}** currently records the lowest ROAS at
+            **{lowest_segment_roas["ROAS"]:.2f}x**, suggesting that targeting, channel selection,
+            messaging or product positioning may require optimization.
+            """
+        )
+    
+    # ── Tab 6: Campaign Performance ─────────────────────────────────────────
     with tab_campaigns:
         st.caption(
             "Evaluate seasonal and promotional campaigns across revenue, "
@@ -776,7 +1045,8 @@ def main() -> None:
 
         st.plotly_chart(
             campaign_chart,
-            use_container_width=True
+            use_container_width=True,
+            key="campaign_revenue_roas"
         )
 
         st.subheader("Campaign Efficiency Matrix")
@@ -818,7 +1088,8 @@ def main() -> None:
 
         st.plotly_chart(
             campaign_matrix,
-            use_container_width=True
+            use_container_width=True,
+            key="campaign_efficiency_matrix"
         )
 
         st.subheader("Campaign Performance Table")
@@ -901,7 +1172,7 @@ def main() -> None:
         )
         b1, b2 = st.columns([3, 1])
         with b1:
-            st.plotly_chart(bud_plot, use_container_width=True)
+            st.plotly_chart(bud_plot, use_container_width=True,key="budget_optimization_chart")
         with b2:
             st.metric(
                 "Projected revenue lift", f"{lift:+.2f}%",
